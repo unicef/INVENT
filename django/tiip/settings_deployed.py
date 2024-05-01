@@ -43,10 +43,6 @@ CELERYBEAT_SCHEDULE = {
         "task": 'published_projects_updated_long_ago',
         "schedule": datetime.timedelta(days=31),
     },
-    "project_review_requested_monthly_notification": {
-        "task": 'project_review_requested_monthly_notification',
-        "schedule": datetime.timedelta(days=30),
-    },
     "solution_log_task": {
         "task": "solution_log_task",
         "schedule": crontab(hour=1, minute=0),
