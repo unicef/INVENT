@@ -1,11 +1,14 @@
+from django.conf import settings
 from django.contrib.admin import AdminSite
 from django.contrib.admin.widgets import AdminTextInputWidget
+from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.forms.fields import CharField
 from django.test import TestCase
 from django.test.client import Client
 from django.contrib.auth.models import User
 from rest_framework.reverse import reverse
+
 
 from core.admin import CustomUserAdmin
 from core.admin.widgets import AdminArrayFieldWidget, AdminArrayField, NoneReadOnlyAdminArrayFieldWidget
@@ -194,3 +197,71 @@ class TestNewsFeed(TestCase):
         response = self.client.get(url, HTTP_ACCEPT_LANGUAGE='fr')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()[0]['title'], data['title_fr'])
+
+
+class FeedbackTest(TestCase):
+    def setUp(self):
+        # Create a user and log them in for authentication
+        self.user = User.objects.create_user(
+            "testuser", "test@example.com", "testpassword"
+        )
+        self.client = Client()
+        self.client.login(username="testuser", password="testpassword")
+
+    def test_create_ticket(self):
+        # Define the URL for creating tickets
+        url = "/api/tickets/"
+
+        # Define the payload for the POST request as per the current vue feedback widget
+        data = {
+            "email": "test@example.com",
+            "subject": "test ticket subject-text",
+            "text": "test ticket message-text",
+            "meta": {
+                "navigator": {
+                    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+                    "platform": "MacIntel",
+                    "appVersion": "5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+                    "product": "Gecko",
+                    "vendor": "Google Inc.",
+                },
+                "name": "testuser",
+            },
+        }
+
+        # Send a POST request
+        response = self.client.post(url, data, content_type="application/json")
+
+        # Assert that the response code is 201
+        self.assertEqual(response.status_code, 201)
+
+        # Assert that at least one email was sent
+        self.assertTrue(len(mail.outbox) > 0, "No emails were sent.")
+
+        # Assert that the email was sent to the address defined by SIMPLE_FEEDBACK_SEND_TO
+        self.assertIn(
+            settings.SIMPLE_FEEDBACK_SEND_TO,
+            mail.outbox[0].to,
+            "The email was not sent to the correct address.",
+        )
+
+        # Assert that the word 'ticket' is in the subject of the email
+        self.assertIn(
+            "ticket",
+            mail.outbox[0].subject,
+            "The email subject does not contain 'ticket'.",
+        )
+
+        email_body = mail.outbox[0].alternatives[0][0]
+
+        # Assert that the email body contains the subject and message text
+        self.assertIn(
+            "subject-text",
+            email_body,
+            "The email body does not contain 'subject-text'.",
+        )
+        self.assertIn(
+            "message-text",
+            email_body,
+            "The email body does not contain 'subject-text'.",
+        )
