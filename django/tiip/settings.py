@@ -397,7 +397,7 @@ THUMBNAIL_HEIGHT = 520
 # THUMBNAIL_WIDTH = round(THUMBNAIL_HEIGHT*THUMBNAIL_RATIO)
 
 SIMPLE_FEEDBACK_SEND_TO = env.str(
-    'SIMPLE_FEEDBACK_SEND_TO', default='john@example.org')
+    'SIMPLE_FEEDBACK_SEND_TO', default='invent@unicef.org')
 
 ENVIRONMENT_NAME = f"{env_name} - ({env.str('DEPLOY_VERSION', default='Unknown')})"
 ENVIRONMENT_COLOR = env_color
