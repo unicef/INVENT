@@ -56,7 +56,7 @@ local_resource(
 
 local_resource(
     name='run-migrations',
-    resource_deps=['reset-sequences', 'redis'],
+    resource_deps=['reset-sequences', 'redis', 'invent-django'],
     cmd="kubectl exec deployments/invent-django -- python manage.py migrate --no-input",
     allow_parallel=True,
     labels=['backend']
