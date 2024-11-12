@@ -181,7 +181,7 @@ k8s_yaml(yaml)
 
 k8s_resource(
     'invent-frontend',
-    port_forwards='80:80',
+    port_forwards='8888:80',
     objects = ['invent-frontend:ServiceAccount'],
     pod_readiness='wait',
     labels='frontend'
