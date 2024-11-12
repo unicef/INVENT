@@ -54,6 +54,14 @@ local_resource(
     labels=['database']
 )
 
+local_resource(
+    name='run-migrations',
+    resource_deps=['reset-sequences', 'redis'],
+    cmd="kubectl exec deployments/invent-django -- python manage.py migrate --no-input",
+    allow_parallel=True,
+    labels=['backend']
+)
+
 helm_resource(
     resource_deps=['bitnami'],
     name='redis',
