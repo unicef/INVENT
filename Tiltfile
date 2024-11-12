@@ -46,6 +46,14 @@ local_resource(
     labels=['database']
 )
 
+local_resource(
+    name='reset-sequences',
+    resource_deps=['import-dump'],
+    cmd="""kubectl exec postgres-postgresql-0 -- env PGPASSWORD=postgres psql -U postgres -d postgres -c "DO \\$\\$ DECLARE seq RECORD; BEGIN FOR seq IN SELECT pg_get_serial_sequence(c.oid::regclass::text, a.attname) AS sequence_name, c.oid::regclass::text AS tablename, a.attname AS colname FROM pg_class c JOIN pg_attribute a ON c.oid = a.attrelid WHERE c.relkind = 'r' AND a.attnum > 0 AND pg_get_serial_sequence(c.oid::regclass::text, a.attname) IS NOT NULL LOOP EXECUTE format('SELECT setval(''%s'', COALESCE((SELECT MAX(%I) FROM %s) + 1, 1), false)', seq.sequence_name, seq.colname, seq.tablename); END LOOP; END; \\$\\$;" """,
+    allow_parallel=True,
+    labels=['database']
+)
+
 helm_resource(
     resource_deps=['bitnami'],
     name='redis',
