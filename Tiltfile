@@ -57,7 +57,12 @@ helm_resource(
         '--set=replica.replicaCount=0',
         '--set=auth.enabled=false',
         '--set=auth.sentinel=false',
-        '--set=cluster.enabled=standalone',
+        '--set=cluster.enabled=false',
+        '--set=sysctl.enabled=true',
+        '--set=sysctl.mountHostSys=true',
+        '--set=sysctl.command[0]=/bin/sh',
+        '--set=sysctl.command[1]=-c',
+        '--set=sysctl.command[2]=install_packages procps; sysctl -w net.core.somaxconn=1000; echo never > /host-sys/kernel/mm/transparent_hugepage/enabled',
     ],
     labels=['redis']
 )
