@@ -1,18 +1,22 @@
 import path from 'path'
 import dotenv from 'dotenv'
-// import webpack from 'webpack';
+
+// Load .env.local (optional)
+dotenv.config({ path: path.resolve(__dirname, '.env.local') })
+
+// Also load default .env file
 const result = dotenv.config()
-
-// const bundlebuddy = require('bundle-buddy-webpack-plugin');
-
-const features = ['default', 'fetch', 'Object.entries', 'Object.from', 'IntersectionObserver', 'EventSource'].join(
-  '%2C'
-)
 
 if (result.error) {
   console.log('\x1B[31m%s\x1B[0m', 'Missing .env file, follow the README instructions')
   throw result.error
 }
+
+console.log('Enable Vue dev tools:', process.env.VUE_DEVTOOLS === 'true')
+
+const features = ['default', 'fetch', 'Object.entries', 'Object.from', 'IntersectionObserver', 'EventSource'].join(
+  '%2C'
+)
 
 const loginUrl =
   'https://login.microsoftonline.com/' +
@@ -24,12 +28,11 @@ const loginUrl =
   '&response_mode=fragment&scope=openid offline_access'
 
 const config = {
-  // only use to debug on DEV server
-  // vue: {
-  //   config: {
-  //     devtools: true,
-  //   },
-  // },
+  vue: {
+    config: {
+      devtools: process.env.VUE_DEVTOOLS === 'true', // Enable devtools if VUE_DEVTOOLS is true
+    },
+  },
   head: {
     title: "Invent: UNICEF's T4D and Innovation Inventory",
     meta: [
