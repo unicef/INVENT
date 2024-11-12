@@ -63,6 +63,14 @@ helm_resource(
         '--set=sysctl.command[0]=/bin/sh',
         '--set=sysctl.command[1]=-c',
         '--set=sysctl.command[2]=install_packages procps; sysctl -w net.core.somaxconn=1000; echo never > /host-sys/kernel/mm/transparent_hugepage/enabled',
+        '--set=master.readinessProbe.exec.command[0]=sh',
+        '--set=master.readinessProbe.exec.command[1]=-c',
+        '--set=master.readinessProbe.exec.command[2]=/health/ping_readiness_local.sh 5',
+        '--set=master.readinessProbe.initialDelaySeconds=30',
+        '--set=master.readinessProbe.periodSeconds=10',
+        '--set=master.readinessProbe.timeoutSeconds=5',
+        '--set=master.readinessProbe.failureThreshold=3',
+        '--set=master.readinessProbe.successThreshold=1'
     ],
     labels=['redis']
 )
