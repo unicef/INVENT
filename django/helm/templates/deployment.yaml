@@ -78,6 +78,12 @@ spec:
             - mountPath: "/usr/share/django/static"
               name: static-data
           env:
+            {{- if .Values.extraEnv }}
+            {{- range .Values.extraEnv }}
+            - name: {{ .name }}
+              value: {{ .value | quote }}
+            {{- end }}
+            {{- end }}
             - name: ENVIRONMENT
               value: {{ .Values.environment }}
             - name: APPLICATIONINSIGHTS_CONNECTION_STRING

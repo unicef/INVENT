@@ -10,4 +10,10 @@ django-admin makemessages -l pt
 python manage.py collectstatic --noinput
 python manage.py compilemessages
 python manage.py migrate
-gunicorn tiip.wsgi:application -w 2 -b :8000 --reload --timeout 120
+if [ "$DJANGO_RUNSERVER" = "true" ]; then
+    echo "Running Django development server"
+    python manage.py runserver 0.0.0.0:8000
+else
+    echo "Running Gunicorn server"
+    gunicorn tiip.wsgi:application -w 2 -b :8000 --reload --timeout 120
+fi
