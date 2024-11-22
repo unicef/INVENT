@@ -129,7 +129,7 @@ helm_resource(
         '--set=extraEnv[0].name=DJANGO_RUNSERVER',
         '--set=extraEnv[0].value=false'  # Set to true to force startup_actions script to run the django server, enabling the debugger
     ],
-    port_forwards=['5678:5678'],
+    port_forwards=['5678:5678', '5679:5679'], # Debugging ports
     labels=['backend']
 )
 
