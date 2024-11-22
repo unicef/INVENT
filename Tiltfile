@@ -46,6 +46,22 @@ local_resource(
     labels=['database']
 )
 
+local_resource(
+    name='reset-sequences',
+    resource_deps=['import-dump'],
+    cmd="""kubectl exec postgres-postgresql-0 -- env PGPASSWORD=postgres psql -U postgres -d postgres -c "DO \\$\\$ DECLARE seq RECORD; BEGIN FOR seq IN SELECT pg_get_serial_sequence(c.oid::regclass::text, a.attname) AS sequence_name, c.oid::regclass::text AS tablename, a.attname AS colname FROM pg_class c JOIN pg_attribute a ON c.oid = a.attrelid WHERE c.relkind = 'r' AND a.attnum > 0 AND pg_get_serial_sequence(c.oid::regclass::text, a.attname) IS NOT NULL LOOP EXECUTE format('SELECT setval(''%s'', COALESCE((SELECT MAX(%I) FROM %s) + 1, 1), false)', seq.sequence_name, seq.colname, seq.tablename); END LOOP; END; \\$\\$;" """,
+    allow_parallel=True,
+    labels=['database']
+)
+
+local_resource(
+    name='run-migrations',
+    resource_deps=['reset-sequences', 'redis', 'invent-django'],
+    cmd="kubectl exec deployments/invent-django -- python manage.py migrate --no-input",
+    allow_parallel=True,
+    labels=['backend']
+)
+
 helm_resource(
     resource_deps=['bitnami'],
     name='redis',
@@ -57,7 +73,20 @@ helm_resource(
         '--set=replica.replicaCount=0',
         '--set=auth.enabled=false',
         '--set=auth.sentinel=false',
-        '--set=cluster.enabled=standalone',
+        '--set=cluster.enabled=false',
+        '--set=sysctl.enabled=true',
+        '--set=sysctl.mountHostSys=true',
+        '--set=sysctl.command[0]=/bin/sh',
+        '--set=sysctl.command[1]=-c',
+        '--set=sysctl.command[2]=install_packages procps; sysctl -w net.core.somaxconn=1000; echo never > /host-sys/kernel/mm/transparent_hugepage/enabled',
+        '--set=master.readinessProbe.exec.command[0]=sh',
+        '--set=master.readinessProbe.exec.command[1]=-c',
+        '--set=master.readinessProbe.exec.command[2]=/health/ping_readiness_local.sh 5',
+        '--set=master.readinessProbe.initialDelaySeconds=30',
+        '--set=master.readinessProbe.periodSeconds=10',
+        '--set=master.readinessProbe.timeoutSeconds=5',
+        '--set=master.readinessProbe.failureThreshold=3',
+        '--set=master.readinessProbe.successThreshold=1'
     ],
     labels=['redis']
 )
@@ -97,7 +126,10 @@ helm_resource(
     image_keys=[('image.repository', 'image.tag')],
     flags=[
         '-f=./django/helm/values-dev.yaml',
+        '--set=extraEnv[0].name=DJANGO_RUNSERVER',
+        '--set=extraEnv[0].value=false'  # Set to true to force startup_actions script to run the django server, enabling the debugger
     ],
+    port_forwards=['5678:5678', '5679:5679'], # Debugging ports
     labels=['backend']
 )
 
@@ -181,7 +213,7 @@ k8s_yaml(yaml)
 
 k8s_resource(
     'invent-frontend',
-    port_forwards='80:80',
+    port_forwards='8888:80',
     objects = ['invent-frontend:ServiceAccount'],
     pod_readiness='wait',
     labels='frontend'

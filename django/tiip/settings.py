@@ -41,6 +41,7 @@ SECRET_KEY = os.environ.get(
 DEBUG = env.str('DEBUG', default=False)
 
 ALLOWED_HOSTS = ['*']
+CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
 
 PROJECT_SHORT_NAME = env.str('PROJECT_SHORT_NAME', default='Short Name')
 PROJECT_NAME = env.str('PROJECT_NAME', default='Example')
