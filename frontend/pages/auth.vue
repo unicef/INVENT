@@ -10,6 +10,7 @@
         </p>
       </div>
     </div>
+    <div style="display: none"><p>X</p></div>
   </div>
 </template>
 <script>
@@ -32,7 +33,7 @@ return {
     if (!process.server) {
       const storedNext = localStorage.getItem('next')
       const next = this.$route.query.next
-   
+
       localStorage.removeItem('next')
       if (next && next !== '/') {
         localStorage.setItem('next', next)
@@ -48,14 +49,14 @@ return {
           })
           try {
             await this.login({ code })
-      
+
             if (this.profile.country) {
             await  this.setSelectedCountry(this.profile.country)
             }
             if (storedNext) {
               this.$router.push(storedNext)
             } else {
-              
+
               // this.$router.push(this.localePath({ name: 'organisation-dashboard-list', params: { organisation: '-' } }));
               this.$router.push(this.localePath({ name: 'organisation', params: { organisation: '-' } }))
             }
@@ -67,7 +68,7 @@ return {
           }
         }
       } else if ( this.user && this.$route.name.split('___')[0] === 'auth' ) {
-        
+
         this.$router.push(this.localePath({ name: 'organisation', params: { organisation: '-' } }))
       }
     }
