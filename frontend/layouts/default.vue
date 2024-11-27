@@ -6,7 +6,6 @@
     <nuxt />
     <!-- <dha-footer /> -->
     <django-feedback />
-    <!-- <p>Test</p> -->
   </div>
 </template>
 
