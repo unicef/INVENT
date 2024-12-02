@@ -261,6 +261,7 @@ export default {
       }
       return {
         ...result,
+        page: window.location.href,
         navigator: {
           userAgent: window.navigator.userAgent,
           platform: window.navigator.platform,
