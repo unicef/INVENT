@@ -1,21 +1,24 @@
+from country.models import Country
+from project.utils import get_temp_image
+from rest_framework.reverse import reverse
+from user.models import UserProfile
+
+from core.admin import CustomUserAdmin
+from core.admin.widgets import (
+    AdminArrayField,
+    AdminArrayFieldWidget,
+    NoneReadOnlyAdminArrayFieldWidget,
+)
+from core.models import NewsItem
 from django.conf import settings
 from django.contrib.admin import AdminSite
 from django.contrib.admin.widgets import AdminTextInputWidget
+from django.contrib.auth.models import User
 from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.forms.fields import CharField
 from django.test import TestCase
 from django.test.client import Client
-from django.contrib.auth.models import User
-from rest_framework.reverse import reverse
-
-
-from core.admin import CustomUserAdmin
-from core.admin.widgets import AdminArrayFieldWidget, AdminArrayField, NoneReadOnlyAdminArrayFieldWidget
-from core.models import NewsItem
-from country.models import Country
-from project.utils import get_temp_image
-from user.models import UserProfile
 
 
 class AuthTest(TestCase):
@@ -225,6 +228,7 @@ class FeedbackTest(TestCase):
                     "product": "Gecko",
                     "vendor": "Google Inc.",
                 },
+                "page": "http://localhost:8888/en/-/portfolio/innovation",
                 "name": "testuser",
             },
         }
