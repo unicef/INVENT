@@ -16,7 +16,6 @@ from .models import Project, ReviewScore
 
 logger = get_task_logger(__name__)
 
-
 def exclude_specific_project_stages(projects, filter_key_prefix="draft"):
     try:
         unicef = Donor.objects.get(name="UNICEF")
@@ -167,9 +166,7 @@ def published_projects_updated_long_ago():
 
     projects = Project.objects.published_only().filter(
         modified__lt=timezone.now() - timezone.timedelta(days=180)
-    )
-
-    projects = exclude_specific_project_stages(projects, filter_key_prefix="data")
+    ).current_only()
 
     if not projects:  # pragma: no cover
         return
