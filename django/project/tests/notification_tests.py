@@ -50,87 +50,70 @@ class ProjectNotificationTests(SetupTests):
     @mock.patch('project.tasks.send_mail_wrapper', return_value=None)
     def test_project_still_in_draft_notification(self, send_mail_wrapper):
         now = timezone.now()
+        number_of_stages = Stage.objects.count()
+        stale_draft_projects = []
 
+        # Create draft and published projects over 30 days ago. The draft ones should trigger reminders, regardless of stage completion
         with freeze_time(now - timezone.timedelta(days=40)):
-            # task should pick this up
-            draft_project_1 = Project.objects.create(name='Draft project 1', public_id='')
-            draft_project_1.team.add(self.profile_1)
+            print(Stage.objects.all())
+            for stage in Stage.objects.all():
+                data = copy.deepcopy(self.published_project_data)
+                data['stages'] = [{'id': stage.id, 'date': '2022-01-01', 'note': 'Completion note'}]
 
-            # make a published project without API calls, task shouldn't pick this up
-            published_project = Project.objects.create(
-                name='Published project 1', data=self.published_project_data, public_id='1234')
-            published_project.team.add(self.profile_1)
+                draft_project = Project.objects.create(name=f'Stale draft project that has completed {stage.name} stage',
+                                                       data=data,
+                                                       public_id='')
+                draft_project.team.add(self.profile_1)
+                # The task should pick draft_project  up
+                stale_draft_projects.append(draft_project)
 
-        with freeze_time(now - timezone.timedelta(days=32)):
-            # task should pick this up
-            draft_project_2 = Project.objects.create(name='Draft project 2', public_id='')
-            draft_project_2.team.add(self.profile_2)
+                published_project = Project.objects.create(name=f'Stale published project that has completed {stage.name} stage',
+                                                           data=data,
+                                                           public_id=f'Published {stage.id}')
+                published_project.team.add(self.profile_1)
+                # The task should not pick published_project up because it's published
 
+        # Create draft and published projects under 30 days ago. This test ensures that none of these recently updated
+        # projects will trigger a reminder, regardless of publication status or completed stages.
         with freeze_time(now - timezone.timedelta(days=20)):
-            # task shouldn't pick this up, it is not over 30 days
-            draft_project_3 = Project.objects.create(name='Draft project 3', public_id='')
-            draft_project_3.team.add(self.profile_3)
+            for stage in Stage.objects.all():
+                data = copy.deepcopy(self.published_project_data)
+                data['stages'] = [{'id': stage.id, 'date': '2022-01-01', 'note': 'Completion note'}]
 
-        with freeze_time(now - timezone.timedelta(days=45)):
-            draft_project_4 = Project.objects.create(name='Draft project 4', public_id='')
-            draft_project_4.team.add(self.profile_4)
+                draft_project = Project.objects.create(name=f'Recently updated d draft project that has completed {stage.name} stage',
+                                                       data=data,
+                                                       public_id='')
+                draft_project.team.add(self.profile_1)
 
-            # draft_project_4 should be excluded because it is in "Scale and Handover" state
-            draft_project_4.draft['donor_custom_answers'] = {
-                self.unicef.id: {self.custom_question.id: ['Scale and Handover']}
-            }
-            draft_project_4.save()
+                published_project = Project.objects.create(name=f'Recently updated d published project that has completed {stage.name} stage',
+                                                           data=data,
+                                                           public_id=f'Published {stage.id}')
+                published_project.team.add(self.profile_1)
 
-            draft_project_5 = Project.objects.create(name='Draft project 5', public_id='')
-            draft_project_5.team.add(self.profile_5)
+       # profile_1 is now a team member of (4 x number_of_stages) projects.
+       # This means one email should be sent to profile_1
+       # 1 x number_of_stages projects are over 30 days old and draft, so should trigger a notification
+       # 1 x number_of_stages projects are over 30 days old and published, so should NOT trigger a notification
+       # 1 x number_of_stages projects are under 30 days old and draft, so should NOT trigger a notification
+       # 1 x number_of_stages projects are under 30 days old and published, so should NOT trigger a notification
 
-            # draft_project_5 should be excluded because it is in "Discontinued" state
-            draft_project_5.draft['donor_custom_answers'] = {
-                self.unicef.id: {self.custom_question.id: ['Discontinued']}
-            }
-            draft_project_5.save()
-
-            # task should pick this up
-            draft_project_6 = Project.objects.create(name='Draft project 6', public_id='')
-            draft_project_6.team.add(self.profile_2)
-
+       # All stale_draft_projects should be included the list of projects to render in the email
         with override_settings(EMAIL_SENDING_PRODUCTION=True):
             project_still_in_draft_notification.apply()
 
-            # task should send emails about Draft project 1 and Draft project 2
-            self.assertEqual(len(send_mail_wrapper.call_args_list), 2)
+            self.assertEqual(len(send_mail_wrapper.call_args_list), 1)
 
             for call in send_mail_wrapper.call_args_list:
                 call_args = call[1]
                 self.assertEqual(call_args['email_type'], 'reminder_common_template')
                 self.assertEqual(call_args['language'], 'en')
-                if call_args['to'] == self.user_1.email:
-                    # user_1 should receive notifications about draft project 1
-                    self.assertEqual(call_args['context']['name'], self.profile_1.name)
-                    self.assertEqual(len(call_args['context']['projects']), 1)
-                    self.assertIn(draft_project_1, call_args['context']['projects'])
-                else:
-                    # user_2 should receive notifications about draft project 2 and draft project 6
-                    self.assertEqual(call_args['context']['name'], self.profile_2.name)
-                    self.assertEqual(len(call_args['context']['projects']), 2)
-                    self.assertIn(draft_project_2, call_args['context']['projects'])
-                    self.assertIn(draft_project_6, call_args['context']['projects'])
-
-        # init
-        send_mail_wrapper.call_args_list = _CallList()
-
-        with override_settings(EMAIL_SENDING_PRODUCTION=False):
-            project_still_in_draft_notification.apply()
-
-            # task should send email about Draft project 1
-            self.assertEqual(len(send_mail_wrapper.call_args_list), 1)
-
-            call_args_list = send_mail_wrapper.call_args_list[0][1]
-            self.assertEqual(call_args_list['email_type'], 'reminder_common_template')
-            self.assertEqual(call_args_list['language'], 'en')
-            self.assertEqual(call_args_list['to'], self.user_1.email)
-            self.assertEqual(len(call_args_list['context']['projects']), 1)
-            self.assertIn(draft_project_1, call_args_list['context']['projects'])
+                self.assertEqual(call_args['to'], self.user_1.email)
+                self.assertEqual(call_args['context']['name'], self.profile_1.name)
+                self.assertEqual(len(call_args['context']['projects']), len(stale_draft_projects))
+                self.assertTrue(
+                    all(project in call_args['context']['projects'] for project in stale_draft_projects),
+                    "Missing project in reminder-to-publish-drafts notification"
+                )
 
     @mock.patch('project.tasks.send_mail_wrapper', return_value=None)
     def test_published_projects_updated_long_ago(self, send_mail_wrapper):

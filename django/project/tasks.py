@@ -16,30 +16,6 @@ from .models import Project, ReviewScore
 
 logger = get_task_logger(__name__)
 
-def exclude_specific_project_stages(projects, filter_key_prefix="draft"):
-    try:
-        unicef = Donor.objects.get(name="UNICEF")
-    except Donor.DoesNotExist:  # pragma: no cover
-        pass
-    else:
-        try:
-            question = DonorCustomQuestion.objects.get(donor=unicef, question="Stage")
-        except DonorCustomQuestion.DoesNotExist:  # pragma: no cover
-            pass
-        else:
-            stages_to_exclude = ["Discontinued", "Scale and Handover"]
-            filtered_projects = Project.objects.none()
-            key = (
-                f"{filter_key_prefix}__donor_custom_answers__{unicef.id}__{question.id}"
-            )
-            for stage in stages_to_exclude:
-                condition = {f"{key}__icontains": stage}
-                filtered_projects = filtered_projects | projects.filter(**condition)
-
-            if filtered_projects:
-                projects = projects.exclude(id__in=filtered_projects)
-    return projects
-
 
 @app.task(name="project_review_requested_on_create_notification")
 def project_review_requested_on_create_notification(review_id, custom_msg=None):
@@ -120,8 +96,6 @@ def project_still_in_draft_notification():
     projects = Project.objects.draft_only().filter(
         modified__lt=timezone.now() - timezone.timedelta(days=31)
     )
-
-    projects = exclude_specific_project_stages(projects)
 
     if not projects:  # pragma: no cover
         return
