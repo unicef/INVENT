@@ -1,17 +1,19 @@
 from collections import defaultdict
-from celery.utils.log import get_task_logger
-from django.conf import settings
-from django.contrib.auth.models import User
-from django.core.exceptions import ObjectDoesNotExist
-from django.utils import timezone
-from django.utils.translation import gettext_lazy as _
-from django.urls import reverse
-from django.apps import apps
 
+from celery.utils.log import get_task_logger
 from core.utils import send_mail_wrapper
 from country.models import Country, Donor, DonorCustomQuestion
 from scheduler.celery import app
 from user.models import UserProfile
+
+from django.apps import apps
+from django.conf import settings
+from django.contrib.auth.models import User
+from django.core.exceptions import ObjectDoesNotExist
+from django.urls import reverse
+from django.utils import timezone
+from django.utils.translation import gettext_lazy as _
+
 from .models import Project, ReviewScore
 
 logger = get_task_logger(__name__)
@@ -193,18 +195,24 @@ def send_project_approval_digest():
 def notify_superusers_about_new_pending_approval(class_name, object_id):
     klass = apps.get_model("project", class_name)
     object = klass.objects.get(id=object_id)
-    super_users = User.objects.filter(is_superuser=True)
 
     email_mapping = defaultdict(list)
-    for user in super_users:
-        try:
-            email_mapping[user.userprofile.language].append(user.email)
-        except ObjectDoesNotExist:
-            email_mapping[settings.LANGUAGE_CODE].append(user.email)
+
+    
+    if settings.APPROVAL_REQUEST_SEND_TO:
+        email_mapping[settings.LANGUAGE_CODE].append(settings.APPROVAL_REQUEST_SEND_TO)
+    else:
+        super_users = User.objects.filter(is_superuser=True)
+        for user in super_users:
+            try:
+                email_mapping[user.userprofile.language].append(user.email)
+            except ObjectDoesNotExist:
+                email_mapping[settings.LANGUAGE_CODE].append(user.email)
 
     change_url = reverse(
         "admin:project_{}_change".format(object._meta.model_name), args=(object.id,)
     )
+    
     for language, email_list in email_mapping.items():
         send_mail_wrapper(
             subject=_(f"New {object._meta.model_name} is pending for approval"),

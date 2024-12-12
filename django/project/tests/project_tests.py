@@ -2,6 +2,7 @@ import copy
 import random
 from datetime import datetime, timedelta
 
+from django.conf import settings
 import mock
 import pytest
 import pytz
@@ -1015,6 +1016,7 @@ class ProjectTests(SetupTests):
 
         notify_superusers_about_new_pending_approval.assert_called_once_with((software._meta.model_name, software.pk))
 
+    @override_settings(APPROVAL_REQUEST_SEND_TO="")
     @mock.patch('project.tasks.send_mail_wrapper')
     def test_notify_super_users_about_pending_software_success(self, send_email):
         super_users = User.objects.filter(is_superuser=True)
@@ -1032,10 +1034,51 @@ class ProjectTests(SetupTests):
             notify_superusers_about_new_pending_approval.apply((software._meta.model_name, software.id))
 
             call_args_list = send_email.call_args_list[0][1]
-            self.assertEqual(call_args_list['subject'], f'New {software._meta.model_name} is pending for approval')
-            self.assertEqual(call_args_list['email_type'], 'new_pending_approval')
+
             self.assertIn(test_super_user_1.email, call_args_list['to'])
             self.assertIn(test_super_user_2.email, call_args_list['to'])
+            self.assertEqual(call_args_list['subject'], f'New {software._meta.model_name} is pending for approval')
+            self.assertEqual(call_args_list['email_type'], 'new_pending_approval')
+            self.assertEqual(call_args_list['context']['object_name'], software.name)
+
+        finally:
+            test_super_user_1.delete()
+            test_super_user_2.delete()
+
+            # give back super user status
+            for user in super_users:
+                user.is_superuser = True
+                user.save()
+
+
+    @override_settings(APPROVAL_REQUEST_SEND_TO="invent-approvals@example.com")
+    @mock.patch('project.tasks.send_mail_wrapper')
+    def test_notify_designated_email_about_pending_software_success(self, send_email):
+        super_users = User.objects.filter(is_superuser=True)
+        # remove super user status from the current super users
+        for user in super_users:
+            user.is_superuser = False
+            user.save()
+
+        test_super_user_1 = User.objects.create_superuser(username='superuser_1', email='s1@pulilab.com', 
+                                                          password='puli_1234', is_staff=True, is_superuser=True)
+        test_super_user_2 = User.objects.create_superuser(username='superuser_2', email='s2@pulilab.com', 
+                                                          password='puli_1234', is_staff=True, is_superuser=True)
+        try:
+            software = TechnologyPlatform.objects.create(name='pending software', state=TechnologyPlatform.PENDING)
+            notify_superusers_about_new_pending_approval.apply((software._meta.model_name, software.id))
+
+            call_args_list = send_email.call_args_list[0][1]
+
+            # The designated email address should receive the notification email
+            self.assertIn(settings.APPROVAL_REQUEST_SEND_TO, call_args_list['to'])
+
+            # No super users should be notified
+            self.assertNotIn(test_super_user_1.email, call_args_list['to'])
+            self.assertNotIn(test_super_user_2.email, call_args_list['to'])
+            
+            self.assertEqual(call_args_list['subject'], f'New {software._meta.model_name} is pending for approval')
+            self.assertEqual(call_args_list['email_type'], 'new_pending_approval')
             self.assertEqual(call_args_list['context']['object_name'], software.name)
 
         finally:

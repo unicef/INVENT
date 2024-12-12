@@ -397,8 +397,14 @@ THUMBNAIL_PADDING = True
 THUMBNAIL_HEIGHT = 520
 # THUMBNAIL_WIDTH = round(THUMBNAIL_HEIGHT*THUMBNAIL_RATIO)
 
-SIMPLE_FEEDBACK_SEND_TO = env.str(
+SIMPLE_FEEDBACK_SEND_TO = env.str (
     'SIMPLE_FEEDBACK_SEND_TO', default='invent@example.org')
+
+# If this is set, then new requests for taxonomy items (software, hardware, platforms, functions)
+# will be sent to the email address specified here.
+# If no value is set, then all superusers will be notified
+APPROVAL_REQUEST_SEND_TO = env.str (
+    'APPROVAL_REQUEST_SEND_TO', default='')
 
 ENVIRONMENT_NAME = f"{env_name} - ({env.str('DEPLOY_VERSION', default='Unknown')})"
 ENVIRONMENT_COLOR = env_color
