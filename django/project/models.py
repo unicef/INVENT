@@ -1,6 +1,7 @@
 import uuid
 from copy import deepcopy
 from collections import namedtuple
+from functools import reduce
 from typing import List, Union, Dict
 
 from django.db.models.fields.json import KeyTextTransform
@@ -87,7 +88,27 @@ class ProjectManager(models.Manager):
 
 
 class ProjectQuerySet(ActiveQuerySet, ProjectManager):
-    pass
+    def current_only(self):
+        """
+        Filters projects to include only those that are in a current state
+        meaning they have not completed a Stage that marks initiatives as inactive.
+
+        Warning: this is based on the project's *published* data, not the draft data
+        """
+        # Fetch IDs of stages that mark initiatives as inactive
+        final_stage_ids = Stage.objects.filter(
+            completion_marks_an_initiative_as_inactive=True
+        ).values_list('id', flat=True)
+
+        # Create a Q object that will exclude projects that have any of these stage IDs
+        exclusion_q = reduce(
+            lambda q, stage_id: q | Q(data__stages__contains=[{"id": stage_id}]),
+            final_stage_ids,
+            Q()
+        )
+
+        # Exclude projects where any of these stage IDs are in the 'stages' array
+        return self.exclude(exclusion_q)
 
 
 class Project(SoftDeleteModel, ExtendedModel):
