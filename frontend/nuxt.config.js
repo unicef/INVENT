@@ -1,10 +1,7 @@
 import path from 'path'
 import dotenv from 'dotenv'
 
-// Load .env.local (optional)
-dotenv.config({ path: path.resolve(__dirname, '.env.local') })
-
-// Also load default .env file
+// Load default .env file
 const result = dotenv.config()
 
 if (result.error) {
