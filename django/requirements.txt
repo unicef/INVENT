@@ -13,6 +13,7 @@ coreapi==2.3.3                          # This project is discontinued and not m
 coverage==7.2.7                         # Updated from 4.5.1. Supports pytest 7.4.0
 cryptography==41.0.2                    # Updated from 2.2.2. paramiko 3.2.0 depends on cryptography>=3.3
 datadog==0.45.0                         # Updated from 0.37.0. 
+debugpy==1.5.1
 decorator==4.3.0                        
 defusedxml==0.7.1                       # Updated from 0.5.0
 dj-database-url==2.0.0                  # Updated from 0.5.0. 

@@ -1,33 +1,42 @@
 import copy
 import random
-import mock
-import pytz
-
 from datetime import datetime, timedelta
 
+from django.conf import settings
+import mock
+import pytest
+import pytz
+from country.models import Country, Donor
+from rest_framework import status
+from rest_framework.test import APIClient
+from user.models import Organisation, UserProfile
+from user.tests import create_profile_for_user
+
+from django.contrib.admin.sites import AdminSite
+from django.contrib.auth.models import User
+from django.core import mail
+from django.core.cache import cache
 from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
-from rest_framework import status
-
-from django.core import mail
-from django.contrib.admin.sites import AdminSite
-from django.contrib.auth.models import User
-from django.core.cache import cache
-from rest_framework.test import APIClient
-
-from country.models import Country, Donor
 from project.admin import ProjectAdmin
+from project.models import (
+    DigitalStrategy,
+    HSCChallenge,
+    HSCGroup,
+    Project,
+    ProjectApproval,
+    ProjectVersion,
+    Stage,
+    TechnologyPlatform,
+)
+from project.tasks import (
+    notify_superusers_about_new_pending_approval,
+    notify_user_about_approval,
+    send_project_approval_digest,
+)
+from project.tests.setup import MockRequest, SetupTests
 from project.utils import get_temp_image
-from user.models import Organisation, UserProfile
-from project.models import Project, DigitalStrategy, TechnologyPlatform, \
-    HSCChallenge, HSCGroup, ProjectApproval, Stage
-from project.tasks import send_project_approval_digest, notify_superusers_about_new_pending_approval, \
-    notify_user_about_approval
-from project.models import ProjectVersion
-
-from project.tests.setup import SetupTests, MockRequest
-from user.tests import create_profile_for_user
 
 
 class ProjectTests(SetupTests):
@@ -37,7 +46,7 @@ class ProjectTests(SetupTests):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "technology_platforms")
         self.assertContains(response, "hsc_challenges")
-        self.assertEqual(len(response.json().keys()), 22)
+        self.assertEqual(len(response.json().keys()), 23)
 
     def test_retrieve_project_structure_cache(self):
         with self.settings(CACHES={'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'}}):
@@ -542,6 +551,7 @@ class ProjectTests(SetupTests):
         send_project_approval_digest()
         self.assertEqual(len(mail.outbox), 0)
 
+    @pytest.mark.skip(reason="This kind of access is now managed by making the user a manager of UNICEF offices")
     def test_country_admins_access_all_projects_in_country_as_viewer(self):
         # Create a test user with profile.
         url = reverse("rest_register")
@@ -835,10 +845,13 @@ class ProjectTests(SetupTests):
             "new_viewer_emails": ["yolo"]
         }
         response = self.test_user_client.put(url, groups, format="json")
-
-        self.assertEqual(
-            response.json(), {'new_team_emails': {'0': ['Enter a valid email address.']},
-                              'new_viewer_emails': {'0': ['Enter a valid email address.']}})
+        # Note that there are two validation errors: one because this is not a valid email address, and another
+        # because the email address does not match the valid regex (i.e., does not come from the expected domain(s) as specified
+        # in settings.EMAIL_VALIDATOR_REGEX)
+        self.assertEqual(response.json(), {
+        'new_team_emails': {'0': ['Incorrect email address.', 'Enter a valid email address.']},
+        'new_viewer_emails': {'0': ['Incorrect email address.', 'Enter a valid email address.']}
+        }) 
 
     def test_add_new_users_by_email(self):
         url = reverse("project-groups", kwargs={"pk": self.project_id})
@@ -1003,6 +1016,7 @@ class ProjectTests(SetupTests):
 
         notify_superusers_about_new_pending_approval.assert_called_once_with((software._meta.model_name, software.pk))
 
+    @override_settings(APPROVAL_REQUEST_SEND_TO="")
     @mock.patch('project.tasks.send_mail_wrapper')
     def test_notify_super_users_about_pending_software_success(self, send_email):
         super_users = User.objects.filter(is_superuser=True)
@@ -1020,10 +1034,51 @@ class ProjectTests(SetupTests):
             notify_superusers_about_new_pending_approval.apply((software._meta.model_name, software.id))
 
             call_args_list = send_email.call_args_list[0][1]
-            self.assertEqual(call_args_list['subject'], f'New {software._meta.model_name} is pending for approval')
-            self.assertEqual(call_args_list['email_type'], 'new_pending_approval')
+
             self.assertIn(test_super_user_1.email, call_args_list['to'])
             self.assertIn(test_super_user_2.email, call_args_list['to'])
+            self.assertEqual(call_args_list['subject'], f'New {software._meta.model_name} is pending for approval')
+            self.assertEqual(call_args_list['email_type'], 'new_pending_approval')
+            self.assertEqual(call_args_list['context']['object_name'], software.name)
+
+        finally:
+            test_super_user_1.delete()
+            test_super_user_2.delete()
+
+            # give back super user status
+            for user in super_users:
+                user.is_superuser = True
+                user.save()
+
+
+    @override_settings(APPROVAL_REQUEST_SEND_TO="invent-approvals@example.com")
+    @mock.patch('project.tasks.send_mail_wrapper')
+    def test_notify_designated_email_about_pending_software_success(self, send_email):
+        super_users = User.objects.filter(is_superuser=True)
+        # remove super user status from the current super users
+        for user in super_users:
+            user.is_superuser = False
+            user.save()
+
+        test_super_user_1 = User.objects.create_superuser(username='superuser_1', email='s1@pulilab.com', 
+                                                          password='puli_1234', is_staff=True, is_superuser=True)
+        test_super_user_2 = User.objects.create_superuser(username='superuser_2', email='s2@pulilab.com', 
+                                                          password='puli_1234', is_staff=True, is_superuser=True)
+        try:
+            software = TechnologyPlatform.objects.create(name='pending software', state=TechnologyPlatform.PENDING)
+            notify_superusers_about_new_pending_approval.apply((software._meta.model_name, software.id))
+
+            call_args_list = send_email.call_args_list[0][1]
+
+            # The designated email address should receive the notification email
+            self.assertIn(settings.APPROVAL_REQUEST_SEND_TO, call_args_list['to'])
+
+            # No super users should be notified
+            self.assertNotIn(test_super_user_1.email, call_args_list['to'])
+            self.assertNotIn(test_super_user_2.email, call_args_list['to'])
+            
+            self.assertEqual(call_args_list['subject'], f'New {software._meta.model_name} is pending for approval')
+            self.assertEqual(call_args_list['email_type'], 'new_pending_approval')
             self.assertEqual(call_args_list['context']['object_name'], software.name)
 
         finally:
@@ -1040,11 +1095,11 @@ class ProjectTests(SetupTests):
         software = TechnologyPlatform.objects.create(name='pending software', state=TechnologyPlatform.PENDING, 
                                                      added_by_id=self.user_profile_id)
         notify_user_about_approval.apply(args=('test', software._meta.model_name, software.id))
-        notify_user_about_approval.apply(args=('approve', software._meta.model_name, software.id))
+        notify_user_about_approval.apply(args=('approve', software._meta.model_name, software.id, software._meta.verbose_name))
 
         send_email.assert_called_once()
         call_args_list = send_email.call_args_list[0][1]
-        self.assertEqual(call_args_list['subject'], f"`{software.name}` you requested has been approved")
+        self.assertEqual(call_args_list['subject'], f"Request for {software._meta.verbose_name} tag") # Request for Software tag
         self.assertEqual(call_args_list['email_type'], 'object_approved')
         self.assertEqual(call_args_list['context']['object_name'], software.name)
 
@@ -1052,10 +1107,10 @@ class ProjectTests(SetupTests):
     def test_notify_user_about_software_decline(self, send_email):
         software = TechnologyPlatform.objects.create(name='pending software', state=TechnologyPlatform.PENDING, 
                                                      added_by_id=self.user_profile_id)
-        notify_user_about_approval.apply(args=('decline', software._meta.model_name, software.id))
+        notify_user_about_approval.apply(args=('decline', software._meta.model_name, software.id, software._meta.verbose_name))
 
         call_args_list = send_email.call_args_list[0][1]
-        self.assertEqual(call_args_list['subject'], f"`{software.name}` you requested has been declined")
+        self.assertEqual(call_args_list['subject'], f"Request for {software._meta.verbose_name} tag") 
         self.assertEqual(call_args_list['email_type'], 'object_declined')
         self.assertEqual(call_args_list['context']['object_name'], software.name)
 
@@ -1101,7 +1156,7 @@ class ProjectTests(SetupTests):
         self.assertEqual(project.data['platforms'][0], software_1.id)
 
         notify_user_about_approval.assert_called_once_with(args=('decline', 
-                                                                 software_2._meta.model_name, software_2.pk))
+                                                                 software_2._meta.model_name, software_2.pk, software_2._meta.verbose_name))
 
     @override_settings(MIGRATE_PHASES=True)
     @mock.patch('project.utils.ID_MAP', {"3": 1, "4": 2, "5": 3, "6": 4, "7": 5, "8": 6})

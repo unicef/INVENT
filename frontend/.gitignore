@@ -11,8 +11,12 @@ npm-debug.log
 dist
 
 coverage/
-##Push .env for testing##
-#.env
+
+# .env file should be created manually for local development by copying and customising .env.template
+# or by build pipeline from secure files
+.env
+.env.local
+
 .yarn-error.log
 .yarn
 
