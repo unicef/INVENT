@@ -1,45 +1,22 @@
 from collections import defaultdict
-from celery.utils.log import get_task_logger
-from django.conf import settings
-from django.contrib.auth.models import User
-from django.core.exceptions import ObjectDoesNotExist
-from django.utils import timezone
-from django.utils.translation import gettext_lazy as _
-from django.urls import reverse
-from django.apps import apps
 
+from celery.utils.log import get_task_logger
 from core.utils import send_mail_wrapper
 from country.models import Country, Donor, DonorCustomQuestion
 from scheduler.celery import app
 from user.models import UserProfile
+
+from django.apps import apps
+from django.conf import settings
+from django.contrib.auth.models import User
+from django.core.exceptions import ObjectDoesNotExist
+from django.urls import reverse
+from django.utils import timezone
+from django.utils.translation import gettext_lazy as _
+
 from .models import Project, ReviewScore
 
 logger = get_task_logger(__name__)
-
-
-def exclude_specific_project_stages(projects, filter_key_prefix="draft"):
-    try:
-        unicef = Donor.objects.get(name="UNICEF")
-    except Donor.DoesNotExist:  # pragma: no cover
-        pass
-    else:
-        try:
-            question = DonorCustomQuestion.objects.get(donor=unicef, question="Stage")
-        except DonorCustomQuestion.DoesNotExist:  # pragma: no cover
-            pass
-        else:
-            stages_to_exclude = ["Discontinued", "Scale and Handover"]
-            filtered_projects = Project.objects.none()
-            key = (
-                f"{filter_key_prefix}__donor_custom_answers__{unicef.id}__{question.id}"
-            )
-            for stage in stages_to_exclude:
-                condition = {f"{key}__icontains": stage}
-                filtered_projects = filtered_projects | projects.filter(**condition)
-
-            if filtered_projects:
-                projects = projects.exclude(id__in=filtered_projects)
-    return projects
 
 
 @app.task(name="project_review_requested_on_create_notification")
@@ -66,51 +43,6 @@ def project_review_requested_on_create_notification(review_id, custom_msg=None):
         )
 
 
-@app.task(name="project_review_requested_monthly_notification")
-def project_review_requested_monthly_notification():
-    """
-    Sends notification if a project needs review by an user - monthly celery task
-    """
-
-    incomplete_reviews = ReviewScore.objects.exclude(
-        status=ReviewScore.STATUS_COMPLETE
-    ).filter(
-        modified__lt=timezone.now()
-        - timezone.timedelta(days=settings.NOTIFICATION_PROJECT_REVIEW_DAYS)
-    )
-
-    if not incomplete_reviews:  # pragma: no cover
-        return
-
-    # limit number of mails sent
-    if not settings.EMAIL_SENDING_PRODUCTION:
-        incomplete_reviews = ReviewScore.objects.filter(
-            id=incomplete_reviews.first().id
-        )
-
-    # grab the list of users
-    addressees = UserProfile.objects.filter(
-        id__in=incomplete_reviews.values_list("reviewer", flat=True).distinct()
-    )
-
-    for addressee in addressees:
-        send_mail_wrapper(
-            subject=_("You have a new project review request"),
-            email_type="reminder_project_review_template",
-            to=addressee.user.email,
-            language=addressee.language or settings.LANGUAGE_CODE,
-            context={
-                "reviewscores": list(
-                    addressee.review_scores.filter(id__in=incomplete_reviews).order_by(
-                        "modified"
-                    )
-                ),
-                "name": addressee.name,
-                "details": _("Please review the following project(s): "),
-            },
-        )
-
-
 @app.task(name="project_still_in_draft_notification")
 def project_still_in_draft_notification():
     """
@@ -121,8 +53,6 @@ def project_still_in_draft_notification():
     projects = Project.objects.draft_only().filter(
         modified__lt=timezone.now() - timezone.timedelta(days=31)
     )
-
-    projects = exclude_specific_project_stages(projects)
 
     if not projects:  # pragma: no cover
         return
@@ -167,9 +97,7 @@ def published_projects_updated_long_ago():
 
     projects = Project.objects.published_only().filter(
         modified__lt=timezone.now() - timezone.timedelta(days=180)
-    )
-
-    projects = exclude_specific_project_stages(projects, filter_key_prefix="data")
+    ).current_only()
 
     if not projects:  # pragma: no cover
         return
@@ -238,18 +166,24 @@ def send_project_approval_digest():
 def notify_superusers_about_new_pending_approval(class_name, object_id):
     klass = apps.get_model("project", class_name)
     object = klass.objects.get(id=object_id)
-    super_users = User.objects.filter(is_superuser=True)
 
     email_mapping = defaultdict(list)
-    for user in super_users:
-        try:
-            email_mapping[user.userprofile.language].append(user.email)
-        except ObjectDoesNotExist:
-            email_mapping[settings.LANGUAGE_CODE].append(user.email)
+
+    
+    if settings.APPROVAL_REQUEST_SEND_TO:
+        email_mapping[settings.LANGUAGE_CODE].append(settings.APPROVAL_REQUEST_SEND_TO)
+    else:
+        super_users = User.objects.filter(is_superuser=True)
+        for user in super_users:
+            try:
+                email_mapping[user.userprofile.language].append(user.email)
+            except ObjectDoesNotExist:
+                email_mapping[settings.LANGUAGE_CODE].append(user.email)
 
     change_url = reverse(
         "admin:project_{}_change".format(object._meta.model_name), args=(object.id,)
     )
+    
     for language, email_list in email_mapping.items():
         send_mail_wrapper(
             subject=_(f"New {object._meta.model_name} is pending for approval"),
