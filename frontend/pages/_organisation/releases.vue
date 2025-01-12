@@ -2,10 +2,6 @@
   <div class="DHAHelpCenter">
     <div class="PageTitle">
       <h2>Release history</h2>
-      <el-button type="text" class="Back IconLeft" @click="goBack">
-        <fa icon="angle-left" />
-        <translate>Go back</translate>
-      </el-button>
     </div>
 
     <el-card class="HelpCard">
