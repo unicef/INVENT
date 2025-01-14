@@ -1,6 +1,6 @@
 replicaCount: 1
 replicaCountCelery: 1
-revisionHistoryLimit: 0
+revisionHistoryLimit: 5
 
 application:
   name: invent-django
