@@ -435,3 +435,6 @@ EMAIL_HOST = env.str('EMAIL_HOST', default='')
 EMAIL_BACKEND = 'djcelery_email.backends.CeleryEmailBackend'
 EMAIL_PORT = env.str('EMAIL_PORT', default=25)
 EMAIL_USE_TLS = env.bool('EMAIL_USE_TLS', default=False)
+
+# Settings for django-import-export-celery email notifications
+EXPORT_JOB_COMPLETION_MAIL_SUBJECT="Your INVENT export is ready"
