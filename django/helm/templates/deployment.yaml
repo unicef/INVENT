@@ -89,6 +89,11 @@ spec:
             - name: APPLICATIONINSIGHTS_CONNECTION_STRING
               value: {{ .Values.applicationsightsConnectionSrting }}
             {{- if not (eq .Values.environment "local") }}
+            - name: SENTRY_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: azure-{{ include "invent-django.fullname" . }}-keyvault
+                  key: sentry-dsn
             - name: SECRET_KEY
               valueFrom:
                 secretKeyRef:
