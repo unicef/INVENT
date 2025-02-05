@@ -47,6 +47,7 @@ PROJECT_SHORT_NAME = env.str('PROJECT_SHORT_NAME', default='Short Name')
 PROJECT_NAME = env.str('PROJECT_NAME', default='Example')
 SITE_URL = env.str('SITE_URL', default='localhost')
 DEFAULT_FROM_EMAIL = env.str('DEFAULT_FROM_EMAIL', default='john@example.org')
+SERVER_EMAIL = env.str('DEFAULT_FROM_EMAIL', default='john@example.org')
 # Developer email who can be reached for API inquiries
 API_MAINTAINER = env.str('API_MAINTAINER', default='john@example.org')
 
