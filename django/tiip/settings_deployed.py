@@ -8,7 +8,7 @@ import os
 
 env = Env()
 env.read_env()
-environment = os.environ.get('ENVIRONMENT')
+environment = env.str('ENVIRONMENT', default='prd')
 sentry_sdk.init(
     dsn=env.str('SENTRY_DSN', default=''),
     integrations=[DjangoIntegration()],
@@ -26,7 +26,8 @@ sentry_sdk.init(
     # environment variable, or infer a git commit
     # SHA as release, however you may want to set
     # something more human-readable.
-    release=env.str('DEPLOY_VERSION', default='0.0.0')
+    release=env.str('DEPLOY_VERSION', default='0.0.0'),
+    environment=environment
 )
 
 
