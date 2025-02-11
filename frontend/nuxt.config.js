@@ -64,6 +64,9 @@ const config = {
   css: ['~assets/style/main.sass', '~assets/style/main.less'],
   env: {
     loginUrl,
+    SENTRY_DSN: process.env.SENTRY_DSN,
+    NUXT_ENV: process.env.NUXT_ENV,
+    SENTRY_ENVIRONMENT: process.env.SENTRY_ENVIRONMENT,
   },
   plugins: [
     { src: '~plugins/eventfix.js', ssr: false },
@@ -83,6 +86,7 @@ const config = {
     '@nuxtjs/axios',
     '@nuxtjs/proxy',
     'nuxt-fontawesome',
+    '@nuxtjs/sentry',
     [
       'nuxt-matomo',
       {
@@ -151,6 +155,19 @@ const config = {
       },
     ],
   ],
+
+  sentry: {
+    dsn: process.env.SENTRY_DSN || '',
+    tracing: true,
+    logLevel: process.env.NODE_ENV === 'production' ? 'error' : 'debug',
+    config: {
+      environment: process.env.SENTRY_ENVIRONMENT || 'unknown',
+    },
+    disabled: process.env.NODE_ENV !== 'production', // should disable when running locally even if sentry DSN is set
+    clientIntegrations: {
+      Vue: { tracing: true },
+    },
+  },
   fontawesome: {
     component: 'fa',
     imports: [
